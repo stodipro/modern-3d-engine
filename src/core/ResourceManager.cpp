@@ -1,4 +1,5 @@
 #include "ResourceManager.hpp"
+#include "ModelLoader.hpp"
 #include "../renderer/Shader.hpp"
 #include "../renderer/Texture.hpp"
 #include "../renderer/Mesh.hpp"
@@ -59,8 +60,21 @@ std::shared_ptr<Mesh> ResourceManager::loadMesh(const std::string& name,
         return meshes[name];
     }
 
-    // TODO: Implement mesh loading from file
-    std::cerr << "Mesh loading not implemented yet: " << name << std::endl;
+    // Load mesh using ModelLoader
+    std::vector<std::shared_ptr<Mesh>> loadedMeshes;
+    if (ModelLoader::loadOBJ(path, loadedMeshes) && !loadedMeshes.empty()) {
+        // Store the first mesh under the given name
+        meshes[name] = loadedMeshes[0];
+        
+        // If there are multiple meshes, store them with indexed names
+        for (size_t i = 1; i < loadedMeshes.size(); ++i) {
+            meshes[name + "_" + std::to_string(i)] = loadedMeshes[i];
+        }
+        
+        return meshes[name];
+    }
+
+    std::cerr << "Failed to load mesh: " << name << std::endl;
     return nullptr;
 }
 
