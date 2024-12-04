@@ -4,6 +4,8 @@
 #include "../src/components/MeshRenderer.hpp"
 #include "../src/components/Light.hpp"
 #include "../src/renderer/LightManager.hpp"
+#include "../src/ui/UISystem.hpp"
+#include "../src/ui/SculptingUI.hpp"
 
 SculptingDemo::SculptingDemo() {}
 
@@ -16,7 +18,9 @@ bool SculptingDemo::initialize() {
 
     // Initialize systems
     Input::getInstance().initialize(engine.getWindow());
+    UISystem::getInstance().initialize(engine.getWindow());
     SculptingSystem::getInstance().initialize();
+    SculptingUI::getInstance().initialize();
 
     // Setup scene
     setupCamera();
@@ -41,15 +45,24 @@ void SculptingDemo::setupCamera() {
 
 void SculptingDemo::setupSculptMesh() {
     sculptMesh = std::make_shared<SculptMesh>();
-    sculptMesh->initializeAsSphere(1.0f, 3); // Create a sphere with 3 subdivisions
+    sculptMesh->initializeAsSphere(1.0f, 3);
 
     sculptMeshEntity = std::make_shared<Entity>("SculptMesh");
     auto transform = sculptMeshEntity->addComponent<Transform>();
     transform->setPosition(glm::vec3(0.0f, 0.0f, 0.0f));
 
-    auto meshRenderer = sculptMeshEntity->addComponent<MeshRenderer>();
+    // Create and set up material
     auto material = std::make_shared<Material>();
-    // Set up material with appropriate shader and properties
+    material->setShader(ResourceManager::getInstance().loadShader(
+        "lit", "assets/shaders/lit.vert", "assets/shaders/lit.frag"));
+    
+    // Set default material properties
+    material->setVector3("material.albedo", glm::vec3(0.7f, 0.7f, 0.7f));
+    material->setFloat("material.metallic", 0.0f);
+    material->setFloat("material.roughness", 0.5f);
+    material->setFloat("material.ao", 1.0f);
+
+    auto meshRenderer = sculptMeshEntity->addComponent<MeshRenderer>();
     meshRenderer->setMaterial(material);
     meshRenderer->setMesh(sculptMesh->generateMesh());
 
@@ -68,13 +81,24 @@ void SculptingDemo::setupLighting() {
     light->setColor(glm::vec3(1.0f));
     light->setIntensity(1.0f);
 
+    // Add fill light
+    auto fillLightEntity = std::make_shared<Entity>("FillLight");
+    auto fillTransform = fillLightEntity->addComponent<Transform>();
+    fillTransform->setPosition(glm::vec3(-3.0f, 2.0f, 2.0f));
+
+    auto fillLight = fillLightEntity->addComponent<Light>();
+    fillLight->setType(Light::Type::Point);
+    fillLight->setColor(glm::vec3(0.6f, 0.8f, 1.0f));
+    fillLight->setIntensity(0.5f);
+    fillLight->setRange(10.0f);
+
     LightManager::getInstance().addLight(light);
+    LightManager::getInstance().addLight(fillLight);
 }
 
 void SculptingDemo::update(float deltaTime) {
     Input::getInstance().update();
     handleInput(deltaTime);
-    updateUI();
 
     // Update systems
     SculptingSystem::getInstance().update(deltaTime);
@@ -93,6 +117,11 @@ void SculptingDemo::update(float deltaTime) {
 
 void SculptingDemo::handleInput(float deltaTime) {
     auto& input = Input::getInstance();
+
+    // Toggle UI with Tab
+    if (input.isKeyJustPressed(GLFW_KEY_TAB)) {
+        SculptingUI::getInstance().toggleVisible();
+    }
 
     // Camera movement
     if (auto transform = cameraEntity->getComponent<Transform>()) {
@@ -115,33 +144,18 @@ void SculptingDemo::handleInput(float deltaTime) {
             transform->rotate(glm::vec3(-mouseDelta.y, -mouseDelta.x, 0.0f));
         }
     }
-
-    // Tool selection
-    if (input.isKeyJustPressed(GLFW_KEY_1))
-        SculptingSystem::getInstance().setActiveTool(SculptingTool::Type::Pull);
-    if (input.isKeyJustPressed(GLFW_KEY_2))
-        SculptingSystem::getInstance().setActiveTool(SculptingTool::Type::Push);
-    if (input.isKeyJustPressed(GLFW_KEY_3))
-        SculptingSystem::getInstance().setActiveTool(SculptingTool::Type::Smooth);
-    if (input.isKeyJustPressed(GLFW_KEY_4))
-        SculptingSystem::getInstance().setActiveTool(SculptingTool::Type::Pinch);
-}
-
-void SculptingDemo::updateUI() {
-    // In a real implementation, you'd want to add ImGui or similar for UI
-    // For now, we'll just print controls to console
-    static bool printedControls = false;
-    if (!printedControls) {
-        std::cout << "Sculpting Controls:\n";
-        std::cout << "1-4: Switch tools (Pull, Push, Smooth, Pinch)\n";
-        std::cout << "Left Mouse: Sculpt\n";
-        std::cout << "Right Mouse: Rotate Camera\n";
-        std::cout << "Mouse Wheel: Adjust Tool Size\n";
-        std::cout << "WASD: Move Camera\n";
-        printedControls = true;
-    }
 }
 
 void SculptingDemo::render() {
+    // Begin frame
+    UISystem::getInstance().beginFrame();
+
+    // Render scene
     engine.render();
+
+    // Render UI
+    SculptingUI::getInstance().render();
+
+    // End frame
+    UISystem::getInstance().endFrame();
 }
